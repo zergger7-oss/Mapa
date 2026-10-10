@@ -1,0 +1,87 @@
+name: Build APK
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Android project
+        run: |
+          set -e
+          mkdir -p app/src/main/assets app/src/main/java/com/gcsurvival/game app/src/main/res/mipmap-xxxhdpi
+          cp index.html app/src/main/assets/index.html
+          cp icon.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          cat > settings.gradle <<'EOF'
+          pluginManagement{repositories{google();mavenCentral();gradlePluginPortal()}}
+          dependencyResolutionManagement{repositories{google();mavenCentral()}}
+          rootProject.name='GayClubSurvival'
+          include ':app'
+          EOF
+          echo "plugins{id 'com.android.application' version '8.5.2' apply false}" > build.gradle
+          echo "org.gradle.jvmargs=-Xmx2g" > gradle.properties
+          cat > app/build.gradle <<'EOF'
+          plugins{id 'com.android.application'}
+          android{
+            namespace 'com.gcsurvival.game'
+            compileSdk 34
+            defaultConfig{applicationId 'com.gcsurvival.game';minSdk 24;targetSdk 34;versionCode 1;versionName '1.0'}
+            buildTypes{release{minifyEnabled false}}
+            compileOptions{sourceCompatibility JavaVersion.VERSION_17;targetCompatibility JavaVersion.VERSION_17}
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.VIBRATE"/>
+            <application android:label="Gay Club Survival" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:hardwareAccelerated="true">
+              <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode">
+                <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+          cat > app/src/main/java/com/gcsurvival/game/MainActivity.java <<'EOF'
+          package com.gcsurvival.game;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          public class MainActivity extends Activity {
+            WebView w;
+            @Override protected void onCreate(Bundle b) {
+              super.onCreate(b);
+              w = new WebView(this);
+              setContentView(w);
+              WebSettings s = w.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              w.setWebViewClient(new WebViewClient());
+              w.setBackgroundColor(0xFF000000);
+              w.setOverScrollMode(View.OVER_SCROLL_NEVER);
+              w.loadUrl("file:///android_asset/index.html");
+              hide();
+            }
+            void hide() {
+              getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+            }
+            @Override public void onWindowFocusChanged(boolean f) { super.onWindowFocusChanged(f); if (f) hide(); }
+            @Override public void onBackPressed() { if (w.canGoBack()) w.goBack(); else super.onBackPressed(); }
+          }
+          EOF
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gay-club-survival-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
